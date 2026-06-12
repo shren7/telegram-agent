@@ -56,8 +56,8 @@ if PROXY:
 else:
     PROXY = {}
 
-NOTIFICATIONS_PATH = pathlib.Path.home() / 'NOTIFICATIONS.md'
-SESSION_PATH = pathlib.Path.home() / 'telegram.session'
+NOTIFICATIONS_PATH = pathlib.Path.cwd() / 'NOTIFICATIONS.md'
+SESSION_PATH = pathlib.Path.cwd() / 'telegram.session'
 
 waiting: dict[int, asyncio.Task] = {}
 working: set[int] = set()
