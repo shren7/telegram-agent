@@ -8,3 +8,21 @@ dependencies = [
     "python-socks>=2.8.1",
     "telethon>=1.43.2",
 ]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.17",
+]
+
+[tool.ruff]
+exclude = [".venv"]
+line-length = 79 
+indent-width = 4
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E501"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

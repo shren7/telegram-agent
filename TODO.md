@@ -1,3 +1,4 @@
 - Remove hard-coded 'Mikhail' from prompt
-- Lint
 - Add file log replication
+- Move from langchain to smolagents
+- Add ty, prek use
