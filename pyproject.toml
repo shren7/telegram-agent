@@ -1,0 +1,10 @@
+[project]
+name = "telegram-agent"
+version = "0.1.0"
+requires-python = ">3.14"
+dependencies = [
+    "langchain[openai]>=1.3.8",
+    "python-dotenv>=1.2.2",
+    "python-socks>=2.8.1",
+    "telethon>=1.43.2",
+]
