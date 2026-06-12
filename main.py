@@ -29,13 +29,13 @@ class ResponseFormat(pydantic.BaseModel):
 
 
 try:
-    APP_ID = int(os.environ.get("APP_ID"))
-    APP_HASH = os.environ.get("APP_HASH")
+    APP_ID = int(os.environ["APP_ID"])
+    APP_HASH = os.environ["APP_HASH"]
 
     # Must be OpenAI-compatible
-    BASE_URL = os.environ.get("BASE_URL")
-    API_KEY = os.environ.get("API_KEY")
-    MODEL = os.environ.get("MODEL")
+    BASE_URL = os.environ["BASE_URL"]
+    API_KEY = os.environ["API_KEY"]
+    MODEL = os.environ["MODEL"]
 
     PROXY = os.environ.get("PROXY", "")
     WAIT_SECONDS = int(os.environ.get("WAIT_SECONDS", 30))
