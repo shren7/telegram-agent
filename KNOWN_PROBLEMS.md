@@ -1,0 +1,1 @@
+- Can't answer for 'write code'-class questions in Telegram

@@ -122,6 +122,7 @@ async def handle_new_message(chat_id: int):
                 + (message.sender.last_name or "")
             ).strip(),
             "text": message.text,
+            "is_message_from_account_owner": message.out
         }
         for message in reversed(
             await client.get_messages(chat_id, limit=100)
