@@ -111,7 +111,9 @@ async def handle_new_message(chat_id: int):
             api_base=config.BASE_URL,
             api_key=config.API_KEY,
         ),
+        verbosity_level=smolagents.LogLevel.DEBUG,
         tools=[SendMessageToChatTool(), SendMessageToOwnerTool()],
+        executor_kwargs={"timeout_seconds": 600},
     )
 
     logger.info("Handling chat %s", chat_id)
@@ -152,13 +154,7 @@ async def handle_new_message(chat_id: int):
     await asyncio.get_event_loop().run_in_executor(
         None,
         agent.run,
-        (
-            config.PROMPT
-            + "\n\n # *CHAT ID*: "
-            + str(chat_id)
-            + "\n\n# Message history\n\n"
-            + json.dumps(history)
-        ),
+        config.PROMPT.format(**{"chat_id": chat_id, "history": history}),
     )
 
     logger.info("Chat %s handled", chat_id)
