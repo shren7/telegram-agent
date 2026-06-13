@@ -2,3 +2,4 @@
 .venv
 *.session
 NOTIFICATIONS.md
+**/__pycache__/**
