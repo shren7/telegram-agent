@@ -1,3 +1,2 @@
-- Add file log replication
 - Add ty, prek use
 - If messages are already read, don't answer

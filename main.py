@@ -13,7 +13,8 @@ from config import config
 
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
+    handlers=[logging.StreamHandler(), logging.FileHandler(config.LOGS_PATH)]
 )
 
 logger = logging.getLogger(__name__)

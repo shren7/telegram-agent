@@ -3,3 +3,4 @@
 *.session
 NOTIFICATIONS.md
 **/__pycache__/**
+logs.txt

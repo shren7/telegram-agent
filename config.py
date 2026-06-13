@@ -27,6 +27,7 @@ else:
 try:
     config = types.SimpleNamespace(
         SESSION_PATH=pathlib.Path.cwd() / "telegram.session",
+        LOGS_PATH=pathlib.Path.cwd() / "logs.txt",
         WAIT_SECONDS=int(os.environ.get("WAIT_SECONDS", 30)),
         PROXY=_proxy,
         PROMPT=_prompt,
