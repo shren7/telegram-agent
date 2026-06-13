@@ -116,6 +116,20 @@ async def handle_new_message(chat_id: int):
 
     logger.info("Handling chat %s", chat_id)
 
+    if (
+        await client(
+            telethon.tl.functions.messages.GetPeerDialogsRequest(
+                peers=[
+                    telethon.tl.types.InputDialogPeer(
+                        await client.get_input_entity(chat_id)
+                    )
+                ]
+            )
+        )
+    ).dialogs[0].unread_count == 0:
+        logger.info("Someone already handled chat %s; skipping", chat_id)
+        return
+
     history = [
         {
             "date": message.date.strftime("%Y-%m-%d %H:%M:%S"),
