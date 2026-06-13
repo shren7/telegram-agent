@@ -1,0 +1,11 @@
+[Service]
+Type=simple
+
+ExecStart=/home/user/.local/opt/telegram-agent/.venv/bin/python3 /home/user/.local/opt/telegram-agent/main.py
+WorkingDirectory=/home/user/.local/opt/telegram-agent
+
+Restart=always
+RestartSec=300
+
+[Install]
+WantedBy=default.target
