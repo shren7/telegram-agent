@@ -12,9 +12,6 @@ import telethon
 import pydantic
 import smolagents
 
-import langchain_openai
-import langchain.agents
-
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
