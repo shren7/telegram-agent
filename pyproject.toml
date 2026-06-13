@@ -5,7 +5,7 @@ requires-python = ">3.14"
 dependencies = [
     "python-dotenv>=1.2.2",
     "python-socks>=2.8.1",
-    "smolagents>=1.26.0",
+    "smolagents[openai]>=1.26.0",
     "telethon>=1.43.2",
 ]
 

@@ -2,65 +2,29 @@ import asyncio
 import json
 import pathlib
 import logging
-import os
 import random
 import traceback
 import urllib.parse
 
-import dotenv
 import telethon
-import pydantic
 import smolagents
+
+from config import config
 
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
 )
-dotenv.load_dotenv()
 
 logger = logging.getLogger(__name__)
 loop: asyncio.AbstractEventLoop = None
 
-
-with open(pathlib.Path.cwd() / "PROMPT.md") as file:
-    PROMPT = file.read()
-
-try: 
-    APP_ID = int(os.environ["APP_ID"])
-    APP_HASH = os.environ["APP_HASH"]
-
-    # Must be OpenAI-compatible
-    BASE_URL = os.environ["BASE_URL"]
-    API_KEY = os.environ["API_KEY"]
-    MODEL = os.environ["MODEL"]
-
-    PROXY = os.environ.get("PROXY", "")
-    WAIT_SECONDS = int(os.environ.get("WAIT_SECONDS", 30))
-except KeyError:
-    logger.critical(
-        "You have forgot add some variables to .env! Here is error"
-    )
-    raise
-
-if PROXY:
-    PROXY = urllib.parse.urlparse(PROXY)
-    PROXY = {
-        "proxy_type": PROXY.scheme,
-        "addr": PROXY.hostname,
-        "port": PROXY.port,
-        "username": PROXY.username,
-        "password": PROXY.password,
-    }
-else:
-    PROXY = {}
-
-NOTIFICATIONS_PATH = pathlib.Path.cwd() / "NOTIFICATIONS.md"
-SESSION_PATH = pathlib.Path.cwd() / "telegram.session"
-
 waiting: dict[int, asyncio.Task] = {}
 working: set[int] = set()
 
-client = telethon.TelegramClient(SESSION_PATH, APP_ID, APP_HASH, proxy=PROXY)
+client = telethon.TelegramClient(
+    config.SESSION_PATH, config.APP_ID, config.APP_HASH, proxy=config.PROXY
+)
 
 
 class SendMessageToChatTool(smolagents.Tool):
@@ -70,14 +34,11 @@ class SendMessageToChatTool(smolagents.Tool):
     It returns status of whether sending was successful."""
 
     inputs = {
-        "text": {
-            "type": "string",
-            "description": "Text of message to send"
-        },
+        "text": {"type": "string", "description": "Text of message to send"},
         "chat_id": {
             "type": "integer",
-            "description": "Id of chat to send message"
-        }
+            "description": "Id of chat to send message",
+        },
     }
     output_type = "string"
 
@@ -93,10 +54,10 @@ class SendMessageToChatTool(smolagents.Tool):
                 await client.send_message(chat_id, text)
 
             logger.info("Reply sent to chat %s.", chat_id)
-            return 'Message was successfully sent!'
+            return "Message was successfully sent!"
         except Exception:
             message = (
-                'Given error while tried to send message:\n'
+                "Given error while tried to send message:\n"
                 + traceback.format_exc()
             )
 
@@ -111,7 +72,7 @@ class SendMessageToChatTool(smolagents.Tool):
 
 
 class SendMessageToOwnerTool(smolagents.Tool):
-    name = 'send_message_to_owner'
+    name = "send_message_to_owner"
     description = """
     This is a tool that will send message to the owner of account.
     It returns status of whether sending was successful."""
@@ -119,11 +80,12 @@ class SendMessageToOwnerTool(smolagents.Tool):
     inputs = {
         "text": {"type": "string", "description": "Text of message to send"}
     }
-    output_type = 'string'
+    output_type = "string"
 
     def forward(self, text: str) -> bool:
-        # You should change it as you like more
         try:
+            # You should change it as you like more
+            NOTIFICATIONS_PATH = pathlib.Path.cwd() / "NOTIFICATIONS.md"
             mode = "a" if NOTIFICATIONS_PATH.exists() else "w"
 
             with NOTIFICATIONS_PATH.open(mode) as file:
@@ -132,10 +94,10 @@ class SendMessageToOwnerTool(smolagents.Tool):
                 file.write(text)
 
             logger.info("Notification for account owner written.")
-            return 'Message for account owner was written!'
+            return "Message for account owner was written!"
         except:
             message = (
-                'Given error while tried to send message:\n'
+                "Given error while tried to send message:\n"
                 + traceback.format_exc()
             )
 
@@ -145,9 +107,9 @@ class SendMessageToOwnerTool(smolagents.Tool):
 
 agent = smolagents.CodeAgent(
     model=smolagents.OpenAIModel(
-        model_id=MODEL, api_base=BASE_URL, api_key=API_KEY
+        model_id=config.MODEL, api_base=config.BASE_URL, api_key=config.API_KEY
     ),
-    tools=[SendMessageToChatTool(), SendMessageToOwnerTool()]
+    tools=[SendMessageToChatTool(), SendMessageToOwnerTool()],
 )
 
 
@@ -168,17 +130,21 @@ async def handle_new_message(chat_id: int):
             }
             for message in reversed(
                 await client.get_messages(chat_id, limit=100)
-            ) if message.text
+            )
+            if message.text
         ]
         logger.info("Chat history for %s loaded", chat_id)
 
         await asyncio.get_event_loop().run_in_executor(
-            None, agent.run, (
-                PROMPT
-                + '\n\n # *CHAT ID*: '
+            None,
+            agent.run,
+            (
+                config.PROMPT
+                + "\n\n # *CHAT ID*: "
                 + str(chat_id)
-                + '\n\n# Message history\n\n' + json.dumps(history)
-            )
+                + "\n\n# Message history\n\n"
+                + json.dumps(history)
+            ),
         )
 
     finally:
@@ -189,10 +155,10 @@ async def debounce(chat_id: int):
     try:
         logger.info(
             "Waiting %s seconds before processing chat %s",
-            WAIT_SECONDS,
+            config.WAIT_SECONDS,
             chat_id,
         )
-        await asyncio.sleep(WAIT_SECONDS)
+        await asyncio.sleep(config.WAIT_SECONDS)
     except asyncio.CancelledError:
         logger.info("Debounce cancelled for chat %s", chat_id)
         raise

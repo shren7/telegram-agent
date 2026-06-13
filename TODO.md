@@ -1,5 +1,4 @@
 - Remove hard-coded 'Mikhail' from prompt
 - Add file log replication
-- Move from langchain to smolagents
 - Add ty, prek use
-- Move configuration to class with configuration
+- If messages are already read, don't answer
