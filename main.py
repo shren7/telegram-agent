@@ -68,7 +68,7 @@ class SendMessageToChatTool(smolagents.Tool):
         logger.info("Tool SendMessageTool ran")
         return asyncio.run_coroutine_threadsafe(
             self._forward(text=text, chat_id=chat_id), loop
-        ).result
+        ).result()
 
 
 class SendMessageToOwnerTool(smolagents.Tool):
