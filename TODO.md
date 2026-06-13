@@ -2,3 +2,4 @@
 - Add file log replication
 - Move from langchain to smolagents
 - Add ty, prek use
+- Move configuration to class with configuration

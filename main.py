@@ -3,11 +3,14 @@ import json
 import pathlib
 import logging
 import os
+import random
+import traceback
 import urllib.parse
 
 import dotenv
 import telethon
 import pydantic
+import smolagents
 
 import langchain_openai
 import langchain.agents
@@ -19,17 +22,13 @@ logging.basicConfig(
 dotenv.load_dotenv()
 
 logger = logging.getLogger(__name__)
-
-
-class ResponseFormat(pydantic.BaseModel):
-    answer_to_chat: str
-    answer_to_mikhail: str
+loop: asyncio.AbstractEventLoop = None
 
 
 with open(pathlib.Path.cwd() / "PROMPT.md") as file:
     PROMPT = file.read()
 
-try:
+try: 
     APP_ID = int(os.environ["APP_ID"])
     APP_HASH = os.environ["APP_HASH"]
 
@@ -66,12 +65,92 @@ working: set[int] = set()
 
 client = telethon.TelegramClient(SESSION_PATH, APP_ID, APP_HASH, proxy=PROXY)
 
-agent = langchain.agents.create_agent(
-    model=langchain_openai.ChatOpenAI(
-        base_url=BASE_URL, api_key=API_KEY, model=MODEL
+
+class SendMessageToChatTool(smolagents.Tool):
+    name = "send_message_to_chat"
+    description = """
+    This is a tool that will send message to the given chat.
+    It returns status of whether sending was successful."""
+
+    inputs = {
+        "text": {
+            "type": "string",
+            "description": "Text of message to send"
+        },
+        "chat_id": {
+            "type": "integer",
+            "description": "Id of chat to send message"
+        }
+    }
+    output_type = "string"
+
+    async def _forward(self, text: str, chat_id: int) -> bool:
+        try:
+            await client.send_read_acknowledge(chat_id)
+            logger.info("Chat %s set as read", chat_id)
+
+            await asyncio.sleep(random.uniform(2, 5))
+
+            async with client.action(chat_id, "typing"):
+                logger.info("Started typing in chat %s", chat_id)
+                await client.send_message(chat_id, text)
+
+            logger.info("Reply sent to chat %s.", chat_id)
+            return 'Message was successfully sent!'
+        except Exception:
+            message = (
+                'Given error while tried to send message:\n'
+                + traceback.format_exc()
+            )
+
+            logger.error(message)
+            return message
+
+    def forward(self, text: str, chat_id: int) -> bool:
+        logger.info("Tool SendMessageTool ran")
+        return asyncio.run_coroutine_threadsafe(
+            self._forward(text=text, chat_id=chat_id), loop
+        ).result
+
+
+class SendMessageToOwnerTool(smolagents.Tool):
+    name = 'send_message_to_owner'
+    description = """
+    This is a tool that will send message to the owner of account.
+    It returns status of whether sending was successful."""
+
+    inputs = {
+        "text": {"type": "string", "description": "Text of message to send"}
+    }
+    output_type = 'string'
+
+    def forward(self, text: str) -> bool:
+        # You should change it as you like more
+        try:
+            mode = "a" if NOTIFICATIONS_PATH.exists() else "w"
+
+            with NOTIFICATIONS_PATH.open(mode) as file:
+                if mode == "a":
+                    file.write("\n\n")
+                file.write(text)
+
+            logger.info("Notification for account owner written.")
+            return 'Message for account owner was written!'
+        except:
+            message = (
+                'Given error while tried to send message:\n'
+                + traceback.format_exc()
+            )
+
+            logger.error(message)
+            return message
+
+
+agent = smolagents.CodeAgent(
+    model=smolagents.OpenAIModel(
+        model_id=MODEL, api_base=BASE_URL, api_key=API_KEY
     ),
-    response_format=ResponseFormat,
-    system_prompt=PROMPT,
+    tools=[SendMessageToChatTool(), SendMessageToOwnerTool()]
 )
 
 
@@ -88,44 +167,22 @@ async def handle_new_message(chat_id: int):
                     + " "
                     + (message.sender.last_name or "")
                 ).strip(),
-                "text": message.text or "",
+                "text": message.text,
             }
             for message in reversed(
                 await client.get_messages(chat_id, limit=100)
-            )
+            ) if message.text
         ]
         logger.info("Chat history for %s loaded", chat_id)
 
-        await client.send_read_acknowledge(chat_id)
-        logger.info("Chat %s set as read", chat_id)
-
-        async with client.action(chat_id, "typing"):
-            logger.info("Started typing in chat %s", chat_id)
-            answer = (
-                await agent.ainvoke(
-                    {
-                        "messages": [
-                            {"role": "user", "content": json.dumps(history)}
-                        ]
-                    }
-                )
-            )["structured_response"]
-            logger.info("Got answer for chat %s: %s", chat_id, answer)
-
-            if answer.answer_to_chat:
-                await client.send_message(chat_id, answer.answer_to_chat)
-                logger.info("Reply sent to chat %s.", chat_id)
-
-        if answer.answer_to_mikhail:
-            mode = "a" if NOTIFICATIONS_PATH.exists() else "w"
-            with NOTIFICATIONS_PATH.open(mode) as file:
-                if mode == "a":
-                    file.write("\n\n")
-                file.write(answer.answer_to_mikhail)
-
-            logger.info(
-                "Notification for Mikhail written for chat %s.", chat_id
+        await asyncio.get_event_loop().run_in_executor(
+            None, agent.run, (
+                PROMPT
+                + '\n\n # *CHAT ID*: '
+                + str(chat_id)
+                + '\n\n# Message history\n\n' + json.dumps(history)
             )
+        )
 
     finally:
         working.discard(chat_id)
@@ -193,6 +250,9 @@ async def encounter_new_message(event):
 
 
 async def main():
+    global loop
+    loop = asyncio.get_event_loop()
+
     logger.info("Starting main().")
     await client.start()
 
