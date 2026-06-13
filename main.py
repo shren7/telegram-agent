@@ -44,13 +44,9 @@ class SendMessageToChatTool(smolagents.Tool):
 
     async def _forward(self, text: str, chat_id: int) -> bool:
         try:
-            await client.send_read_acknowledge(chat_id)
-            logger.info("Chat %s set as read", chat_id)
-
-            await asyncio.sleep(random.uniform(2, 5))
-
             async with client.action(chat_id, "typing"):
                 logger.info("Started typing in chat %s", chat_id)
+                await asyncio.sleep(len(text) / random.uniform(5, 10))
                 await client.send_message(chat_id, text)
 
             logger.info("Reply sent to chat %s.", chat_id)
@@ -105,56 +101,58 @@ class SendMessageToOwnerTool(smolagents.Tool):
             return message
 
 
-agent = smolagents.CodeAgent(
-    model=smolagents.OpenAIModel(
-        model_id=config.MODEL, api_base=config.BASE_URL, api_key=config.API_KEY
-    ),
-    tools=[SendMessageToChatTool(), SendMessageToOwnerTool()],
-)
-
-
 async def handle_new_message(chat_id: int):
+    agent = smolagents.CodeAgent(
+        model=smolagents.OpenAIModel(
+            model_id=config.MODEL, 
+            api_base=config.BASE_URL, 
+            api_key=config.API_KEY
+        ),
+        tools=[SendMessageToChatTool(), SendMessageToOwnerTool()],
+    )
+
     logger.info("Handling chat %s", chat_id)
-    working.add(chat_id)
 
-    try:
-        history = [
-            {
-                "date": message.date.strftime("%Y-%m-%d %H:%M:%S"),
-                "sender": (
-                    (message.sender.first_name or "")
-                    + " "
-                    + (message.sender.last_name or "")
-                ).strip(),
-                "text": message.text,
-            }
-            for message in reversed(
-                await client.get_messages(chat_id, limit=100)
-            )
-            if message.text
-        ]
-        logger.info("Chat history for %s loaded", chat_id)
-
-        await asyncio.get_event_loop().run_in_executor(
-            None,
-            agent.run,
-            (
-                config.PROMPT
-                + "\n\n # *CHAT ID*: "
-                + str(chat_id)
-                + "\n\n# Message history\n\n"
-                + json.dumps(history)
-            ),
+    history = [
+        {
+            "date": message.date.strftime("%Y-%m-%d %H:%M:%S"),
+            "sender": (
+                (message.sender.first_name or "")
+                + " "
+                + (message.sender.last_name or "")
+            ).strip(),
+            "text": message.text,
+        }
+        for message in reversed(
+            await client.get_messages(chat_id, limit=100)
         )
+        if message.text
+    ]
+    logger.info("Chat history for %s loaded", chat_id)
+    
+    await client.send_read_acknowledge(chat_id)
+    logger.info("Chat %s set as read", chat_id)
 
-    finally:
-        working.discard(chat_id)
+
+    await asyncio.get_event_loop().run_in_executor(
+        None,
+        agent.run,
+        (
+            config.PROMPT
+            + "\n\n # *CHAT ID*: "
+            + str(chat_id)
+            + "\n\n# Message history\n\n"
+            + json.dumps(history)
+        ),
+    )
+
+    logger.info("Chat %s handled", chat_id)
 
 
 async def debounce(chat_id: int):
     try:
         logger.info(
-            "Waiting %s seconds before processing chat %s",
+            "Waiting %s seconds before handling chat %s",
             config.WAIT_SECONDS,
             chat_id,
         )
@@ -163,8 +161,13 @@ async def debounce(chat_id: int):
         logger.info("Debounce cancelled for chat %s", chat_id)
         raise
 
-    waiting.pop(chat_id, None)
-    await handle_new_message(chat_id=chat_id)
+    try:
+        logger.info("Waiting ended for chat %s", chat_id)
+        working.add(chat_id)
+        await handle_new_message(chat_id=chat_id)
+    finally:
+        working.discard(chat_id)
+        waiting.pop(chat_id, None)
 
 
 @client.on(telethon.events.NewMessage)
@@ -177,13 +180,14 @@ async def encounter_new_message(event):
 
     if event.out:
         logger.info(
-            "Message in chat %s was sent by me; skipping", event.chat_id
+            "Message in chat %s was sent by owner account; skipping", 
+            event.chat_id
         )
         return
 
     if event.chat_id in waiting:
         logger.info(
-            "Chat %s already waiting; restarting the debounce timer",
+            "Chat %s already waiting or being handled",
             event.chat_id,
         )
 
@@ -191,23 +195,30 @@ async def encounter_new_message(event):
 
         if is_chat_in_working:
             logger.info(
-                "Chat %s already being processed; waiting for completion",
+                "Chat %s already being handled; waiting for completion",
                 event.chat_id,
             )
 
-        while event.chat_id in working:
-            await asyncio.sleep(1)
+            while event.chat_id in working:
+                await asyncio.sleep(1)
 
-        if is_chat_in_working:
-            logger.info("Processing finished for chat %s", event.chat_id)
-
-        try:
-            waiting[event.chat_id].cancel()
-            await waiting[event.chat_id]
-        finally:
+            logger.info("Handling finished for chat %s", event.chat_id)
+            
             waiting[event.chat_id] = asyncio.create_task(
                 debounce(event.chat_id)
             )
+        else:
+            logger.info(
+                'Chat %s is not being handled yet; reloading timer', chat_id
+            )
+
+            try:
+                waiting[event.chat_id].cancel()
+                await waiting[event.chat_id]
+            finally:
+                waiting[event.chat_id] = asyncio.create_task(
+                    debounce(event.chat_id)
+                )
     else:
         waiting[event.chat_id] = asyncio.create_task(debounce(event.chat_id))
 
@@ -216,15 +227,16 @@ async def main():
     global loop
     loop = asyncio.get_event_loop()
 
-    logger.info("Starting main().")
+    logger.info("Start main().")
     await client.start()
 
-    logger.info("Scanning existing dialogs")
+    logger.info("Scanning existing dialogs.")
     async for dialog in client.iter_dialogs():
         if dialog.is_user and dialog.unread_count > 0:
             waiting[dialog.id] = asyncio.create_task(debounce(dialog.id))
-            logger.info("Found dialog %s with unread messages", dialog.id)
-    logger.info("Finished scanning existing dialogs")
+            logger.info("Found dialog %s with unread messages.", dialog.id)
+    logger.info("Finished scanning existing dialogs.")
+
     await client.run_until_disconnected()
 
 
