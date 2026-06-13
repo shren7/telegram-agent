@@ -39,7 +39,5 @@ try:
         MODEL=os.environ["MODEL"],
     )
 except KeyError:
-    logger.critical(
-        "You have forgot add some variables to .env! Here is error"
-    )
+    print("You have forgot add some variables to .env! Here is error")
     raise

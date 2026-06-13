@@ -1,9 +1,9 @@
 import asyncio
 import json
 import pathlib
-import logging
 import random
 import traceback
+import logging
 import urllib.parse
 
 import telethon
@@ -13,12 +13,13 @@ from config import config
 
 
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s",
-    handlers=[logging.StreamHandler(), logging.FileHandler(config.LOGS_PATH)]
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s",
+    handlers=[logging.StreamHandler(), logging.FileHandler(config.LOGS_PATH)],
 )
 
 logger = logging.getLogger(__name__)
-loop: asyncio.AbstractEventLoop = None
+loop: asyncio.AbstractEventLoop | None = None
 
 waiting: dict[int, asyncio.Task] = {}
 working: set[int] = set()
@@ -43,9 +44,9 @@ class SendMessageToChatTool(smolagents.Tool):
     }
     output_type = "string"
 
-    async def _forward(self, text: str, chat_id: int) -> bool:
+    async def _forward(self, text: str, chat_id: int) -> str:
         try:
-            async with client.action(chat_id, "typing"):
+            async with client.action(chat_id, "typing"):  # ty: ignore[invalid-context-manager]
                 logger.info("Started typing in chat %s", chat_id)
                 await asyncio.sleep(len(text) / random.uniform(5, 10))
                 await client.send_message(chat_id, text)
@@ -61,10 +62,11 @@ class SendMessageToChatTool(smolagents.Tool):
             logger.error(message)
             return message
 
-    def forward(self, text: str, chat_id: int) -> bool:
+    def forward(self, text: str, chat_id: int) -> str:
         logger.info("Tool SendMessageTool ran")
         return asyncio.run_coroutine_threadsafe(
-            self._forward(text=text, chat_id=chat_id), loop
+            self._forward(text=text, chat_id=chat_id),
+            loop,  # ty: ignore[invalid-argument-type]
         ).result()
 
 
@@ -79,7 +81,7 @@ class SendMessageToOwnerTool(smolagents.Tool):
     }
     output_type = "string"
 
-    def forward(self, text: str) -> bool:
+    def forward(self, text: str) -> str:
         try:
             # You should change it as you like more
             NOTIFICATIONS_PATH = pathlib.Path.cwd() / "NOTIFICATIONS.md"
@@ -105,9 +107,9 @@ class SendMessageToOwnerTool(smolagents.Tool):
 async def handle_new_message(chat_id: int):
     agent = smolagents.CodeAgent(
         model=smolagents.OpenAIModel(
-            model_id=config.MODEL, 
-            api_base=config.BASE_URL, 
-            api_key=config.API_KEY
+            model_id=config.MODEL,
+            api_base=config.BASE_URL,
+            api_key=config.API_KEY,
         ),
         tools=[SendMessageToChatTool(), SendMessageToOwnerTool()],
     )
@@ -123,18 +125,15 @@ async def handle_new_message(chat_id: int):
                 + (message.sender.last_name or "")
             ).strip(),
             "text": message.text,
-            "is_message_from_account_owner": message.out
+            "is_message_from_account_owner": message.out,
         }
-        for message in reversed(
-            await client.get_messages(chat_id, limit=100)
-        )
+        for message in reversed(await client.get_messages(chat_id, limit=100))  # ty: ignore[no-matching-overload]
         if message.text
     ]
     logger.info("Chat history for %s loaded", chat_id)
-    
+
     await client.send_read_acknowledge(chat_id)
     logger.info("Chat %s set as read", chat_id)
-
 
     await asyncio.get_event_loop().run_in_executor(
         None,
@@ -172,7 +171,7 @@ async def debounce(chat_id: int):
         waiting.pop(chat_id, None)
 
 
-@client.on(telethon.events.NewMessage)
+@client.on(telethon.events.NewMessage())
 async def encounter_new_message(event):
     logger.info("Received new message in chat %s", event.chat_id)
 
@@ -182,8 +181,8 @@ async def encounter_new_message(event):
 
     if event.out:
         logger.info(
-            "Message in chat %s was sent by owner account; skipping", 
-            event.chat_id
+            "Message in chat %s was sent by owner account; skipping",
+            event.chat_id,
         )
         return
 
@@ -205,13 +204,14 @@ async def encounter_new_message(event):
                 await asyncio.sleep(1)
 
             logger.info("Handling finished for chat %s", event.chat_id)
-            
+
             waiting[event.chat_id] = asyncio.create_task(
                 debounce(event.chat_id)
             )
         else:
             logger.info(
-                'Chat %s is not being handled yet; reloading timer', chat_id
+                "Chat %s is not being handled yet; reloading timer",
+                event.chat_id,
             )
 
             try:
@@ -230,7 +230,7 @@ async def main():
     loop = asyncio.get_event_loop()
 
     logger.info("Start main().")
-    await client.start()
+    await client.start()  # ty: ignore[invalid-await]
 
     logger.info("Scanning existing dialogs.")
     async for dialog in client.iter_dialogs():
