@@ -1,0 +1,36 @@
+[[repos]]
+repo = "local"
+hooks = [
+    {
+        id = "uv-sync",
+	name = "uv sync --dev",
+	entry = "uv sync --dev",
+	language = "system",
+	pass_filenames = false,
+	always_run = true
+    },
+    {
+        id = "ruff-check",
+	name = "uv run ruff check",
+	entry = "uv run ruff check",
+	language = "system",
+	pass_filenames = false,
+	always_run = true
+    },
+    {
+        id = "ruff-format",
+	name = "uv run ruff format",
+	entry = "uv run ruff format",
+	language = "system",
+	pass_filenames = false,
+	always_run = true
+    },
+    {
+        id = "ty",
+	name = "uv run ty check",
+	entry = "uv run ty check",
+	language = "system",
+	pass_filenames = false,
+	always_run = true
+    }
+]
